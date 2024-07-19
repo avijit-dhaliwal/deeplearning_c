@@ -1,5 +1,3 @@
-// tests/test_tensor.c
-
 #include "../include/tensor.h"
 #include <assert.h>
 #include <math.h>
@@ -35,7 +33,6 @@ void test_tensor_add() {
     Tensor* t1 = tensor_create(data1, shape, 2, (Device){CPU, 0});
     Tensor* t2 = tensor_create(data2, shape, 2, (Device){CPU, 0});
     Tensor* result = tensor_add(t1, t2);
-    assert(result != NULL);
     for (size_t i = 0; i < result->size; i++) {
         assert(fabs(result->data[i] - 7.0f) < 1e-6);
     }
@@ -53,7 +50,6 @@ void test_tensor_matmul() {
     Tensor* t1 = tensor_create(data1, shape1, 2, (Device){CPU, 0});
     Tensor* t2 = tensor_create(data2, shape2, 2, (Device){CPU, 0});
     Tensor* result = tensor_matmul(t1, t2);
-    assert(result != NULL);
     assert(result->shape[0] == 2);
     assert(result->shape[1] == 2);
     float expected[] = {58, 64, 139, 154};
@@ -71,6 +67,6 @@ int main() {
     test_tensor_fill();
     test_tensor_add();
     test_tensor_matmul();
-    printf("All tests passed!\n");
+    printf("All tensor tests passed!\n");
     return 0;
 }
