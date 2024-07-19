@@ -23,6 +23,28 @@ struct Tensor {
 };
 
 Tensor* tensor_create(float* data, size_t* shape, size_t ndim, Device device) {
+    if (ndim == 0 || shape == NULL) {
+        fprintf(stderr, "Error: Invalid tensor shape\n");
+        return NULL;
+    }
+
+    Tensor* t = malloc(sizeof(Tensor));
+    if (t == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed\n");
+        return NULL;
+    }
+    Tensor* t = malloc(sizeof(Tensor));
+    if (t == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed\n");
+        return NULL;
+    }
+
+    t->shape = malloc(ndim * sizeof(size_t));
+    if (t->shape == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed\n");
+        free(t);
+        return NULL;
+    }
     Tensor* t = malloc(sizeof(Tensor));
     t->ndim = ndim;
     t->shape = malloc(ndim * sizeof(size_t));
