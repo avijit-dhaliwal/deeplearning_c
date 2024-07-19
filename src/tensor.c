@@ -6,6 +6,7 @@
 
 #ifdef USE_CUDA
 #include <cuda_runtime.h>
+#include <curand.h>
 #include <cublas_v2.h>
 #endif
 
@@ -134,11 +135,7 @@ void tensor_fill_(Tensor* t, float value) {
     }
 #ifdef USE_CUDA
     else if (t->device.type == CUDA) {
-        float* h_value = malloc(sizeof(float));
-        *h_value = value;
-        cudaMemcpy(t->cuda_data, h_value, sizeof(float), cudaMemcpyHostToDevice);
         cudaMemset(t->cuda_data, value, t->size * sizeof(float));
-        free(h_value);
     }
 #endif
 }
@@ -257,7 +254,8 @@ Tensor* tensor_add(Tensor* a, Tensor* b) {
     else if (a->device.type == CUDA) {
         cublasHandle_t handle;
         cublasCreate(&handle);
-        cublasSaxpy(handle, a->size, &(float){1.0}, a->cuda_data, 1, b->cuda_data, 1);
+        float alpha = 1.0f;
+        cublasSaxpy(handle, a->size, &alpha, a->cuda_data, 1, b->cuda_data, 1);
         cudaMemcpy(result->cuda_data, b->cuda_data, a->size * sizeof(float), cudaMemcpyDeviceToDevice);
         cublasDestroy(handle);
     }
@@ -283,8 +281,9 @@ Tensor* tensor_sub(Tensor* a, Tensor* b) {
     else if (a->device.type == CUDA) {
         cublasHandle_t handle;
         cublasCreate(&handle);
-        cublasSaxpy(handle, a->size, &(float){-1.0}, b->cuda_data, 1, a->cuda_data, 1);
+        float alpha = -1.0f;
         cudaMemcpy(result->cuda_data, a->cuda_data, a->size * sizeof(float), cudaMemcpyDeviceToDevice);
+        cublasSaxpy(handle, a->size, &alpha, b->cuda_data, 1, result->cuda_data, 1);
         cublasDestroy(handle);
     }
 #endif
@@ -330,7 +329,7 @@ Tensor* tensor_div(Tensor* a, Tensor* b) {
     }
 #ifdef USE_CUDA
     else if (a->device.type == CUDA) {
-        // Custom CUDA kernel for element-wise division
+        // CUDA kernel for element-wise division
         dim3 block(256);
         dim3 grid((a->size + block.x - 1) / block.x);
         elementwise_div<<<grid, block>>>(result->cuda_data, a->cuda_data, b->cuda_data, a->size);
@@ -397,186 +396,3 @@ Tensor* tensor_transpose(Tensor* t) {
     else if (t->device.type == CUDA) {
         cublasHandle_t handle;
         cublasCreate(&handle);
-        float alpha = 1.0f, beta = 0.0f;
-        cublasSgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, t->shape[1], t->shape[0],
-                    &alpha, t->cuda_data, t->shape[1],
-                    &beta, t->cuda_data, t->shape[1],
-                    result->cuda_data, t->shape[0]);
-        cublasDestroy(handle);
-    }
-#endif
-
-    return result;
-}
-
-Tensor* tensor_exp(Tensor* t) {
-    Tensor* result = tensor_create(NULL, t->shape, t->ndim, t->device);
-
-    if (t->device.type == CPU) {
-        for (size_t i = 0; i < t->size; i++) {
-            result->data[i] = expf(t->data[i]);
-        }
-    }
-#ifdef USE_CUDA
-    else if (t->device.type == CUDA) {
-        // Custom CUDA kernel for element-wise exp
-        dim3 block(256);
-        dim3 grid((t->size + block.x - 1) / block.x);
-        elementwise_exp<<<grid, block>>>(result->cuda_data, t->cuda_data, t->size);
-    }
-#endif
-
-    return result;
-}
-
-Tensor* tensor_log(Tensor* t) {
-    Tensor* result = tensor_create(NULL, t->shape, t->ndim, t->device);
-
-    if (t->device.type == CPU) {
-        for (size_t i = 0; i < t->size; i++) {
-            result->data[i] = logf(t->data[i]);
-        }
-    }
-#ifdef USE_CUDA
-    else if (t->device.type == CUDA) {
-        // Custom CUDA kernel for element-wise log
-        dim3 block(256);
-        dim3 grid((t->size + block.x - 1) / block.x);
-        elementwise_log<<<grid, block>>>(result->cuda_data, t->cuda_data, t->size);
-    }
-#endif
-
-    return result;
-}
-
-Tensor* tensor_pow(Tensor* t, float exponent) {
-    Tensor* result = tensor_create(NULL, t->shape, t->ndim, t->device);
-
-    if (t->device.type == CPU) {
-        for (size_t i = 0; i < t->size; i++) {
-            result->data[i] = powf(t->data[i], exponent);
-        }
-    }
-#ifdef USE_CUDA
-    else if (t->device.type == CUDA) {
-        // Custom CUDA kernel for element-wise power
-        dim3 block(256);
-        dim3 grid((t->size + block.x - 1) / block.x);
-        elementwise_pow<<<grid, block>>>(result->cuda_data, t->cuda_data, exponent, t->size);
-    }
-#endif
-
-    return result;
-}
-
-Tensor* tensor_mean(Tensor* t, int dim) {
-    if (dim < 0 || dim >= t->ndim) {
-        fprintf(stderr, "Invalid dimension for mean\n");
-        return NULL;
-    }
-
-    size_t new_shape[t->ndim - 1];
-    size_t j = 0;
-    for (size_t i = 0; i < t->ndim; i++) {
-        if (i != dim) {
-            new_shape[j++] = t->shape[i];
-        }
-    }
-
-    Tensor* result = tensor_create(NULL, new_shape, t->ndim - 1, t->device);
-
-    if (t->device.type == CPU) {
-        size_t stride = t->strides[dim];
-        size_t dim_size = t->shape[dim];
-        for (size_t i = 0; i < result->size; i++) {
-            float sum = 0;
-            for (size_t k = 0; k < dim_size; k++) {
-                sum += t->data[i * stride + k * t->strides[dim]];
-            }
-            result->data[i] = sum / dim_size;
-        }
-    }
-#ifdef USE_CUDA
-    else if (t->device.type == CUDA) {
-        // Custom CUDA kernel for mean reduction
-        dim3 block(256);
-        dim3 grid((result->size + block.x - 1) / block.x);
-        mean_reduction<<<grid, block>>>(result->cuda_data, t->cuda_data, t->shape[dim], t->strides[dim], result->size);
-    }
-#endif
-
-    return result;
-}
-
-Tensor* tensor_sum_dim(Tensor* t, int dim) {
-    if (dim < 0 || dim >= t->ndim) {
-        fprintf(stderr, "Invalid dimension for sum\n");
-        return NULL;
-    }
-
-    size_t new_shape[t->ndim - 1];
-    size_t j = 0;
-    for (size_t i = 0; i < t->ndim; i++) {
-        if (i != dim) {
-            new_shape[j++] = t->shape[i];
-        }
-    }
-
-    Tensor* result = tensor_create(NULL, new_shape, t->ndim - 1, t->device);
-
-    if (t->device.type == CPU) {
-        size_t stride = t->strides[dim];
-        size_t dim_size = t->shape[dim];
-        for (size_t i = 0; i < result->size; i++) {
-            float sum = 0;
-            for (size_t k = 0; k < dim_size; k++) {
-                sum += t->data[i * stride + k * t->strides[dim]];
-            }
-            result->data[i] = sum;
-        }
-    }
-#ifdef USE_CUDA
-    else if (t->device.type == CUDA) {
-        // Custom CUDA kernel for sum reduction
-        dim3 block(256);
-        dim3 grid((result->size + block.x - 1) / block.x);
-        sum_reduction<<<grid, block>>>(result->cuda_data, t->cuda_data, t->shape[dim], t->strides[dim], result->size);
-    }
-#endif
-
-    return result;
-}
-
-void tensor_print(Tensor* t) {
-    printf("Tensor shape: (");
-    for (size_t i = 0; i < t->ndim; i++) {
-        printf("%zu", t->shape[i]);
-        if (i < t->ndim - 1) printf(", ");
-    }
-    printf(")\n");
-
-    if (t->device.type == CUDA) {
-        printf("Device: CUDA\n");
-        return;
-    }
-
-    if (t->ndim == 1) {
-        for (size_t i = 0; i < t->shape[0]; i++) {
-            printf("%f ", t->data[i]);
-        }
-        printf("\n");
-    } else if (t->ndim == 2) {
-        for (size_t i = 0; i < t->shape[0]; i++) {
-            for (size_t j = 0; j < t->shape[1]; j++) {
-                printf("%f ", t->data[i * t->shape[1] + j]);
-            }
-            printf("\n");
-        }
-    } else {
-        printf("Tensor data: ");
-        for (size_t i = 0; i < t->size; i++) {
-            printf("%f ", t->data[i]);
-        }
-        printf("\n");
-    }
-}
