@@ -1,4 +1,5 @@
 #include "../include/nn.h"
+#include "../include/tensor.h"
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
@@ -14,17 +15,50 @@ typedef struct {
 
 static Tensor* linear_forward(Module* module, Tensor* input) {
     Linear* layer = (Linear*)module;
+    if (input == NULL) {
+        fprintf(stderr, "Error: NULL input tensor in linear forward\n");
+        return NULL;
+    }
     layer->input = tensor_clone(input);
+    if (layer->input == NULL) {
+        fprintf(stderr, "Error: Failed to clone input tensor in linear forward\n");
+        return NULL;
+    }
     layer->output = tensor_matmul(input, layer->weights);
-    return tensor_add(layer->output, layer->bias);
+    if (layer->output == NULL) {
+        fprintf(stderr, "Error: Matrix multiplication failed in linear forward\n");
+        return NULL;
+    }
+    Tensor* result = tensor_add(layer->output, layer->bias);
+    if (result == NULL) {
+        fprintf(stderr, "Error: Tensor addition failed in linear forward\n");
+        return NULL;
+    }
+    return result;
 }
 
 static void linear_backward(Module* module) {
     Linear* layer = (Linear*)module;
+    if (layer->output == NULL || layer->input == NULL) {
+        fprintf(stderr, "Error: NULL tensors in linear backward\n");
+        return;
+    }
     Tensor* grad_output = layer->output;
     layer->base.gradients[0] = tensor_matmul(tensor_transpose(layer->input), grad_output);
+    if (layer->base.gradients[0] == NULL) {
+        fprintf(stderr, "Error: Failed to compute weight gradients in linear backward\n");
+        return;
+    }
     layer->base.gradients[1] = tensor_sum_dim(grad_output, 0);
+    if (layer->base.gradients[1] == NULL) {
+        fprintf(stderr, "Error: Failed to compute bias gradients in linear backward\n");
+        return;
+    }
     Tensor* grad_input = tensor_matmul(grad_output, tensor_transpose(layer->weights));
+    if (grad_input == NULL) {
+        fprintf(stderr, "Error: Failed to compute input gradients in linear backward\n");
+        return;
+    }
     tensor_free(layer->input);
     layer->input = grad_input;
 }
@@ -33,6 +67,10 @@ static void linear_update(Module* module, float lr) {
     Linear* layer = (Linear*)module;
     Tensor* scaled_grad_weights = tensor_mul_scalar(layer->base.gradients[0], lr);
     Tensor* scaled_grad_bias = tensor_mul_scalar(layer->base.gradients[1], lr);
+    if (scaled_grad_weights == NULL || scaled_grad_bias == NULL) {
+        fprintf(stderr, "Error: Failed to scale gradients in linear update\n");
+        return;
+    }
     tensor_sub_inplace(layer->weights, scaled_grad_weights);
     tensor_sub_inplace(layer->bias, scaled_grad_bias);
     tensor_free(scaled_grad_weights);
@@ -43,6 +81,9 @@ static void linear_to(Module* module, Device device) {
     Linear* layer = (Linear*)module;
     layer->weights = tensor_to(layer->weights, device);
     layer->bias = tensor_to(layer->bias, device);
+    if (layer->weights == NULL || layer->bias == NULL) {
+        fprintf(stderr, "Error: Failed to transfer linear layer to device\n");
+    }
 }
 
 static void linear_free(Module* module) {
@@ -58,6 +99,10 @@ static void linear_free(Module* module) {
 
 Module* nn_linear(size_t in_features, size_t out_features) {
     Linear* layer = malloc(sizeof(Linear));
+    if (layer == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed for linear layer\n");
+        return NULL;
+    }
     layer->base.forward = linear_forward;
     layer->base.backward = linear_backward;
     layer->base.update = linear_update;
@@ -67,10 +112,22 @@ Module* nn_linear(size_t in_features, size_t out_features) {
     layer->base.num_parameters = 2;
     layer->base.parameters = malloc(2 * sizeof(Tensor*));
     layer->base.gradients = malloc(2 * sizeof(Tensor*));
+    if (layer->base.parameters == NULL || layer->base.gradients == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed for linear layer parameters/gradients\n");
+        free(layer);
+        return NULL;
+    }
 
     float stddev = sqrt(2.0 / (in_features + out_features));
     layer->weights = tensor_randn((size_t[]){in_features, out_features}, 2, 0, stddev, (Device){CPU, 0});
     layer->bias = tensor_create(NULL, (size_t[]){1, out_features}, 2, (Device){CPU, 0});
+    if (layer->weights == NULL || layer->bias == NULL) {
+        fprintf(stderr, "Error: Failed to create weight/bias tensors for linear layer\n");
+        free(layer->base.parameters);
+        free(layer->base.gradients);
+        free(layer);
+        return NULL;
+    }
     tensor_fill_(layer->bias, 0.0f);
 
     layer->base.parameters[0] = layer->weights;
@@ -95,7 +152,15 @@ typedef struct {
 
 static Tensor* conv2d_forward(Module* module, Tensor* input) {
     Conv2D* layer = (Conv2D*)module;
+    if (input == NULL) {
+        fprintf(stderr, "Error: NULL input tensor in conv2d forward\n");
+        return NULL;
+    }
     layer->input = tensor_clone(input);
+    if (layer->input == NULL) {
+        fprintf(stderr, "Error: Failed to clone input tensor in conv2d forward\n");
+        return NULL;
+    }
     
     size_t batch_size = input->shape[0];
     size_t in_height = input->shape[2];
@@ -104,7 +169,12 @@ static Tensor* conv2d_forward(Module* module, Tensor* input) {
     size_t out_width = (in_width + 2 * layer->padding - layer->kernel_size) / layer->stride + 1;
     
     Tensor* output = tensor_create(NULL, (size_t[]){batch_size, layer->out_channels, out_height, out_width}, 4, input->device);
+    if (output == NULL) {
+        fprintf(stderr, "Error: Failed to create output tensor in conv2d forward\n");
+        return NULL;
+    }
     
+    // Implement convolution operation
     for (size_t b = 0; b < batch_size; b++) {
         for (size_t oc = 0; oc < layer->out_channels; oc++) {
             for (size_t oh = 0; oh < out_height; oh++) {
@@ -134,6 +204,10 @@ static Tensor* conv2d_forward(Module* module, Tensor* input) {
 
 static void conv2d_backward(Module* module) {
     Conv2D* layer = (Conv2D*)module;
+    if (layer->output == NULL || layer->input == NULL) {
+        fprintf(stderr, "Error: NULL tensors in conv2d backward\n");
+        return;
+    }
     
     size_t batch_size = layer->input->shape[0];
     size_t in_height = layer->input->shape[2];
@@ -143,7 +217,18 @@ static void conv2d_backward(Module* module) {
     
     layer->base.gradients[0] = tensor_create(NULL, layer->filters->shape, layer->filters->ndim, layer->filters->device);
     layer->base.gradients[1] = tensor_create(NULL, layer->bias->shape, layer->bias->ndim, layer->bias->device);
+    if (layer->base.gradients[0] == NULL || layer->base.gradients[1] == NULL) {
+        fprintf(stderr, "Error: Failed to create gradient tensors in conv2d backward\n");
+        return;
+    }
     
+    Tensor* grad_input = tensor_create(NULL, layer->input->shape, layer->input->ndim, layer->input->device);
+    if (grad_input == NULL) {
+        fprintf(stderr, "Error: Failed to create grad_input tensor in conv2d backward\n");
+        return;
+    }
+    
+    // Compute gradients
     for (size_t oc = 0; oc < layer->out_channels; oc++) {
         for (size_t ic = 0; ic < layer->in_channels; ic++) {
             for (size_t kh = 0; kh < layer->kernel_size; kh++) {
@@ -178,12 +263,19 @@ static void conv2d_backward(Module* module) {
         }
         layer->base.gradients[1]->data[oc] = grad_sum;
     }
+    
+    tensor_free(layer->input);
+    layer->input = grad_input;
 }
 
 static void conv2d_update(Module* module, float lr) {
     Conv2D* layer = (Conv2D*)module;
     Tensor* scaled_grad_filters = tensor_mul_scalar(layer->base.gradients[0], lr);
     Tensor* scaled_grad_bias = tensor_mul_scalar(layer->base.gradients[1], lr);
+    if (scaled_grad_filters == NULL || scaled_grad_bias == NULL) {
+        fprintf(stderr, "Error: Failed to scale gradients in conv2d update\n");
+        return;
+    }
     tensor_sub_inplace(layer->filters, scaled_grad_filters);
     tensor_sub_inplace(layer->bias, scaled_grad_bias);
     tensor_free(scaled_grad_filters);
@@ -194,6 +286,9 @@ static void conv2d_to(Module* module, Device device) {
     Conv2D* layer = (Conv2D*)module;
     layer->filters = tensor_to(layer->filters, device);
     layer->bias = tensor_to(layer->bias, device);
+    if (layer->filters == NULL || layer->bias == NULL) {
+        fprintf(stderr, "Error: Failed to transfer conv2d layer to device\n");
+    }
 }
 
 static void conv2d_free(Module* module) {
@@ -209,6 +304,10 @@ static void conv2d_free(Module* module) {
 
 Module* nn_conv2d(size_t in_channels, size_t out_channels, size_t kernel_size, size_t stride, size_t padding) {
     Conv2D* layer = malloc(sizeof(Conv2D));
+    if (layer == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed for conv2d layer\n");
+        return NULL;
+    }
     layer->base.forward = conv2d_forward;
     layer->base.backward = conv2d_backward;
     layer->base.update = conv2d_update;
@@ -224,10 +323,22 @@ Module* nn_conv2d(size_t in_channels, size_t out_channels, size_t kernel_size, s
     layer->base.num_parameters = 2;
     layer->base.parameters = malloc(2 * sizeof(Tensor*));
     layer->base.gradients = malloc(2 * sizeof(Tensor*));
+    if (layer->base.parameters == NULL || layer->base.gradients == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed for conv2d layer parameters/gradients\n");
+        free(layer);
+        return NULL;
+    }
 
     float stddev = sqrt(2.0 / (in_channels * kernel_size * kernel_size + out_channels * kernel_size * kernel_size));
     layer->filters = tensor_randn((size_t[]){out_channels, in_channels, kernel_size, kernel_size}, 4, 0, stddev, (Device){CPU, 0});
     layer->bias = tensor_create(NULL, (size_t[]){out_channels}, 1, (Device){CPU, 0});
+    if (layer->filters == NULL || layer->bias == NULL) {
+        fprintf(stderr, "Error: Failed to create filter/bias tensors for conv2d layer\n");
+        free(layer->base.parameters);
+        free(layer->base.gradients);
+        free(layer);
+        return NULL;
+    }
     tensor_fill_(layer->bias, 0.0f);
 
     layer->base.parameters[0] = layer->filters;
@@ -245,8 +356,20 @@ typedef struct {
 
 static Tensor* relu_forward(Module* module, Tensor* input) {
     ReLU* layer = (ReLU*)module;
+    if (input == NULL) {
+        fprintf(stderr, "Error: NULL input tensor in ReLU forward\n");
+        return NULL;
+    }
     layer->input = tensor_clone(input);
+    if (layer->input == NULL) {
+        fprintf(stderr, "Error: Failed to clone input tensor in ReLU forward\n");
+        return NULL;
+    }
     layer->output = tensor_create(NULL, input->shape, input->ndim, input->device);
+    if (layer->output == NULL) {
+        fprintf(stderr, "Error: Failed to create output tensor in ReLU forward\n");
+        return NULL;
+    }
     for (size_t i = 0; i < input->size; i++) {
         layer->output->data[i] = fmaxf(0, input->data[i]);
     }
@@ -255,21 +378,29 @@ static Tensor* relu_forward(Module* module, Tensor* input) {
 
 static void relu_backward(Module* module) {
     ReLU* layer = (ReLU*)module;
+    if (layer->input == NULL || layer->output == NULL) {
+        fprintf(stderr, "Error: NULL tensors in ReLU backward\n");
+        return;
+    }
     for (size_t i = 0; i < layer->input->size; i++) {
         layer->input->data[i] = layer->input->data[i] > 0 ? layer->output->data[i] : 0;
     }
 }
 
 static void relu_update(Module* module, float lr) {
-    // ReLU has no parameters to update
     (void)module;
     (void)lr;
+    // ReLU has no parameters to update
 }
 
 static void relu_to(Module* module, Device device) {
     ReLU* layer = (ReLU*)module;
-    layer->input = tensor_to(layer->input, device);
-    layer->output = tensor_to(layer->output, device);
+    if (layer->input) {
+        layer->input = tensor_to(layer->input, device);
+    }
+    if (layer->output) {
+        layer->output = tensor_to(layer->output, device);
+    }
 }
 
 static void relu_free(Module* module) {
@@ -281,6 +412,10 @@ static void relu_free(Module* module) {
 
 Module* nn_relu() {
     ReLU* layer = malloc(sizeof(ReLU));
+    if (layer == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed for ReLU layer\n");
+        return NULL;
+    }
     layer->base.forward = relu_forward;
     layer->base.backward = relu_backward;
     layer->base.update = relu_update;
@@ -289,120 +424,8 @@ Module* nn_relu() {
     layer->base.num_parameters = 0;
     layer->base.parameters = NULL;
     layer->base.gradients = NULL;
-    return (Module*)layer;
-}
-
-// Sigmoid Activation
-typedef struct {
-    Module base;
-    Tensor* input;
-    Tensor* output;
-} Sigmoid;
-
-static Tensor* sigmoid_forward(Module* module, Tensor* input) {
-    Sigmoid* layer = (Sigmoid*)module;
-    layer->input = tensor_clone(input);
-    layer->output = tensor_create(NULL, input->shape, input->ndim, input->device);
-    for (size_t i = 0; i < input->size; i++) {
-        layer->output->data[i] = 1.0f / (1.0f + expf(-input->data[i]));
-    }
-    return layer->output;
-}
-
-static void sigmoid_backward(Module* module) {
-    Sigmoid* layer = (Sigmoid*)module;
-    for (size_t i = 0; i < layer->input->size; i++) {
-        float s = layer->output->data[i];
-        layer->input->data[i] = s * (1 - s) * layer->output->data[i];
-    }
-}
-
-static void sigmoid_update(Module* module, float lr) {
-    // Sigmoid has no parameters to update
-    (void)module;
-    (void)lr;
-}
-
-static void sigmoid_to(Module* module, Device device) {
-    Sigmoid* layer = (Sigmoid*)module;
-    layer->input = tensor_to(layer->input, device);
-    layer->output = tensor_to(layer->output, device);
-}
-
-static void sigmoid_free(Module* module) {
-    Sigmoid* layer = (Sigmoid*)module;
-    tensor_free(layer->input);
-    tensor_free(layer->output);
-    free(layer);
-}
-
-Module* nn_sigmoid() {
-    Sigmoid* layer = malloc(sizeof(Sigmoid));
-    layer->base.forward = sigmoid_forward;
-    layer->base.backward = sigmoid_backward;
-    layer->base.update = sigmoid_update;
-    layer->base.to = sigmoid_to;
-    layer->base.free = sigmoid_free;
-    layer->base.num_parameters = 0;
-    layer->base.parameters = NULL;
-    layer->base.gradients = NULL;
-    return (Module*)layer;
-}
-
-// Tanh Activation
-typedef struct {
-    Module base;
-    Tensor* input;
-    Tensor* output;
-} Tanh;
-
-static Tensor* tanh_forward(Module* module, Tensor* input) {
-    Tanh* layer = (Tanh*)module;
-    layer->input = tensor_clone(input);
-    layer->output = tensor_create(NULL, input->shape, input->ndim, input->device);
-    for (size_t i = 0; i < input->size; i++) {
-        layer->output->data[i] = tanhf(input->data[i]);
-    }
-    return layer->output;
-}
-
-static void tanh_backward(Module* module) {
-    Tanh* layer = (Tanh*)module;
-    for (size_t i = 0; i < layer->input->size; i++) {
-        float t = layer->output->data[i];
-        layer->input->data[i] = (1 - t * t) * layer->output->data[i];
-    }
-}
-
-static void tanh_update(Module* module, float lr) {
-    // Tanh has no parameters to update
-    (void)module;
-    (void)lr;
-}
-
-static void tanh_to(Module* module, Device device) {
-    Tanh* layer = (Tanh*)module;
-    layer->input = tensor_to(layer->input, device);
-    layer->output = tensor_to(layer->output, device);
-}
-
-static void tanh_free(Module* module) {
-    Tanh* layer = (Tanh*)module;
-    tensor_free(layer->input);
-    tensor_free(layer->output);
-    free(layer);
-}
-
-Module* nn_tanh() {
-    Tanh* layer = malloc(sizeof(Tanh));
-    layer->base.forward = tanh_forward;
-    layer->base.backward = tanh_backward;
-    layer->base.update = tanh_update;
-    layer->base.to = tanh_to;
-    layer->base.free = tanh_free;
-    layer->base.num_parameters = 0;
-    layer->base.parameters = NULL;
-    layer->base.gradients = NULL;
+    layer->input = NULL;
+    layer->output = NULL;
     return (Module*)layer;
 }
 
@@ -418,7 +441,15 @@ typedef struct {
 
 static Tensor* maxpool2d_forward(Module* module, Tensor* input) {
     MaxPool2D* layer = (MaxPool2D*)module;
+    if (input == NULL) {
+        fprintf(stderr, "Error: NULL input tensor in MaxPool2D forward\n");
+        return NULL;
+    }
     layer->input = tensor_clone(input);
+    if (layer->input == NULL) {
+        fprintf(stderr, "Error: Failed to clone input tensor in MaxPool2D forward\n");
+        return NULL;
+    }
     
     size_t batch_size = input->shape[0];
     size_t channels = input->shape[1];
@@ -429,6 +460,10 @@ static Tensor* maxpool2d_forward(Module* module, Tensor* input) {
     
     layer->output = tensor_create(NULL, (size_t[]){batch_size, channels, out_height, out_width}, 4, input->device);
     layer->max_indices = tensor_create(NULL, (size_t[]){batch_size, channels, out_height, out_width}, 4, input->device);
+    if (layer->output == NULL || layer->max_indices == NULL) {
+        fprintf(stderr, "Error: Failed to create output or max_indices tensor in MaxPool2D forward\n");
+        return NULL;
+    }
     
     for (size_t b = 0; b < batch_size; b++) {
         for (size_t c = 0; c < channels; c++) {
@@ -460,27 +495,22 @@ static Tensor* maxpool2d_forward(Module* module, Tensor* input) {
 
 static void maxpool2d_backward(Module* module) {
     MaxPool2D* layer = (MaxPool2D*)module;
-    
-    size_t batch_size = layer->input->shape[0];
-    size_t channels = layer->input->shape[1];
-    size_t in_height = layer->input->shape[2];
-    size_t in_width = layer->input->shape[3];
-    size_t out_height = layer->output->shape[2];
-    size_t out_width = layer->output->shape[3];
+    if (layer->input == NULL || layer->output == NULL || layer->max_indices == NULL) {
+        fprintf(stderr, "Error: NULL tensors in MaxPool2D backward\n");
+        return;
+    }
     
     Tensor* grad_input = tensor_create(NULL, layer->input->shape, layer->input->ndim, layer->input->device);
+    if (grad_input == NULL) {
+        fprintf(stderr, "Error: Failed to create grad_input tensor in MaxPool2D backward\n");
+        return;
+    }
     tensor_fill_(grad_input, 0.0f);
     
-    for (size_t b = 0; b < batch_size; b++) {
-        for (size_t c = 0; c < channels; c++) {
-            for (size_t oh = 0; oh < out_height; oh++) {
-                for (size_t ow = 0; ow < out_width; ow++) {
-                    size_t out_idx = ((b * channels + c) * out_height + oh) * out_width + ow;
-                    size_t max_idx = (size_t)layer->max_indices->data[out_idx];
-                    grad_input->data[max_idx] += layer->output->data[out_idx];
-                }
-            }
-        }
+    size_t output_size = layer->output->size;
+    for (size_t i = 0; i < output_size; i++) {
+        size_t max_idx = (size_t)layer->max_indices->data[i];
+        grad_input->data[max_idx] += layer->output->data[i];
     }
     
     tensor_free(layer->input);
@@ -488,16 +518,22 @@ static void maxpool2d_backward(Module* module) {
 }
 
 static void maxpool2d_update(Module* module, float lr) {
-    // MaxPool2D has no parameters to update
     (void)module;
     (void)lr;
+    // MaxPool2D has no parameters to update
 }
 
 static void maxpool2d_to(Module* module, Device device) {
     MaxPool2D* layer = (MaxPool2D*)module;
-    layer->input = tensor_to(layer->input, device);
-    layer->output = tensor_to(layer->output, device);
-    layer->max_indices = tensor_to(layer->max_indices, device);
+    if (layer->input) {
+        layer->input = tensor_to(layer->input, device);
+    }
+    if (layer->output) {
+        layer->output = tensor_to(layer->output, device);
+    }
+    if (layer->max_indices) {
+        layer->max_indices = tensor_to(layer->max_indices, device);
+    }
 }
 
 static void maxpool2d_free(Module* module) {
@@ -510,6 +546,10 @@ static void maxpool2d_free(Module* module) {
 
 Module* nn_maxpool2d(size_t kernel_size, size_t stride) {
     MaxPool2D* layer = malloc(sizeof(MaxPool2D));
+    if (layer == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed for MaxPool2D layer\n");
+        return NULL;
+    }
     layer->base.forward = maxpool2d_forward;
     layer->base.backward = maxpool2d_backward;
     layer->base.update = maxpool2d_update;
@@ -520,6 +560,9 @@ Module* nn_maxpool2d(size_t kernel_size, size_t stride) {
     layer->base.gradients = NULL;
     layer->kernel_size = kernel_size;
     layer->stride = stride;
+    layer->input = NULL;
+    layer->output = NULL;
+    layer->max_indices = NULL;
     return (Module*)layer;
 }
 
@@ -542,7 +585,15 @@ typedef struct {
 
 static Tensor* batchnorm2d_forward(Module* module, Tensor* input) {
     BatchNorm2D* layer = (BatchNorm2D*)module;
+    if (input == NULL) {
+        fprintf(stderr, "Error: NULL input tensor in BatchNorm2D forward\n");
+        return NULL;
+    }
     layer->input = tensor_clone(input);
+    if (layer->input == NULL) {
+        fprintf(stderr, "Error: Failed to clone input tensor in BatchNorm2D forward\n");
+        return NULL;
+    }
     
     size_t batch_size = input->shape[0];
     size_t channels = input->shape[1];
@@ -551,12 +602,20 @@ static Tensor* batchnorm2d_forward(Module* module, Tensor* input) {
     
     if (layer->output == NULL) {
         layer->output = tensor_create(NULL, input->shape, input->ndim, input->device);
+        if (layer->output == NULL) {
+            fprintf(stderr, "Error: Failed to create output tensor in BatchNorm2D forward\n");
+            return NULL;
+        }
     }
     
-    if (layer->training) {
+    if (layer->base.training) {
         // Calculate mean and variance for each channel
         layer->sample_mean = tensor_create(NULL, (size_t[]){1, channels, 1, 1}, 4, input->device);
         layer->sample_var = tensor_create(NULL, (size_t[]){1, channels, 1, 1}, 4, input->device);
+        if (layer->sample_mean == NULL || layer->sample_var == NULL) {
+            fprintf(stderr, "Error: Failed to create sample_mean or sample_var tensor in BatchNorm2D forward\n");
+            return NULL;
+        }
         
         for (size_t c = 0; c < channels; c++) {
             float sum = 0.0f, sq_sum = 0.0f;
@@ -582,10 +641,15 @@ static Tensor* batchnorm2d_forward(Module* module, Tensor* input) {
     
     // Normalize and scale
     layer->normalized = tensor_create(NULL, input->shape, input->ndim, input->device);
+    if (layer->normalized == NULL) {
+        fprintf(stderr, "Error: Failed to create normalized tensor in BatchNorm2D forward\n");
+        return NULL;
+    }
+    
     for (size_t b = 0; b < batch_size; b++) {
         for (size_t c = 0; c < channels; c++) {
-            float mean = layer->training ? layer->sample_mean->data[c] : layer->running_mean->data[c];
-            float var = layer->training ? layer->sample_var->data[c] : layer->running_var->data[c];
+            float mean = layer->base.training ? layer->sample_mean->data[c] : layer->running_mean->data[c];
+            float var = layer->base.training ? layer->sample_var->data[c] : layer->running_var->data[c];
             float std = sqrtf(var + layer->eps);
             float gamma = layer->gamma->data[c];
             float beta = layer->beta->data[c];
@@ -606,6 +670,10 @@ static Tensor* batchnorm2d_forward(Module* module, Tensor* input) {
 
 static void batchnorm2d_backward(Module* module) {
     BatchNorm2D* layer = (BatchNorm2D*)module;
+    if (layer->input == NULL || layer->output == NULL || layer->normalized == NULL) {
+        fprintf(stderr, "Error: NULL tensors in BatchNorm2D backward\n");
+        return;
+    }
     
     size_t batch_size = layer->input->shape[0];
     size_t channels = layer->input->shape[1];
@@ -616,6 +684,11 @@ static void batchnorm2d_backward(Module* module) {
     Tensor* grad_input = tensor_create(NULL, layer->input->shape, layer->input->ndim, layer->input->device);
     layer->base.gradients[0] = tensor_create(NULL, layer->gamma->shape, layer->gamma->ndim, layer->gamma->device);
     layer->base.gradients[1] = tensor_create(NULL, layer->beta->shape, layer->beta->ndim, layer->beta->device);
+    
+    if (grad_input == NULL || layer->base.gradients[0] == NULL || layer->base.gradients[1] == NULL) {
+        fprintf(stderr, "Error: Failed to create gradient tensors in BatchNorm2D backward\n");
+        return;
+    }
     
     for (size_t c = 0; c < channels; c++) {
         float sum_dy = 0.0f, sum_dy_x = 0.0f;
@@ -660,6 +733,10 @@ static void batchnorm2d_update(Module* module, float lr) {
     BatchNorm2D* layer = (BatchNorm2D*)module;
     Tensor* scaled_grad_gamma = tensor_mul_scalar(layer->base.gradients[0], lr);
     Tensor* scaled_grad_beta = tensor_mul_scalar(layer->base.gradients[1], lr);
+    if (scaled_grad_gamma == NULL || scaled_grad_beta == NULL) {
+        fprintf(stderr, "Error: Failed to scale gradients in BatchNorm2D update\n");
+        return;
+    }
     tensor_sub_inplace(layer->gamma, scaled_grad_gamma);
     tensor_sub_inplace(layer->beta, scaled_grad_beta);
     tensor_free(scaled_grad_gamma);
@@ -685,11 +762,11 @@ static void batchnorm2d_free(Module* module) {
     tensor_free(layer->beta);
     tensor_free(layer->running_mean);
     tensor_free(layer->running_var);
-    if (layer->input) tensor_free(layer->input);
-    if (layer->output) tensor_free(layer->output);
-    if (layer->sample_mean) tensor_free(layer->sample_mean);
-    if (layer->sample_var) tensor_free(layer->sample_var);
-    if (layer->normalized) tensor_free(layer->normalized);
+    tensor_free(layer->input);
+    tensor_free(layer->output);
+    tensor_free(layer->sample_mean);
+    tensor_free(layer->sample_var);
+    tensor_free(layer->normalized);
     free(layer->base.parameters);
     free(layer->base.gradients);
     free(layer);
@@ -697,6 +774,10 @@ static void batchnorm2d_free(Module* module) {
 
 Module* nn_batchnorm2d(size_t num_features) {
     BatchNorm2D* layer = malloc(sizeof(BatchNorm2D));
+    if (layer == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed for BatchNorm2D layer\n");
+        return NULL;
+    }
     layer->base.forward = batchnorm2d_forward;
     layer->base.backward = batchnorm2d_backward;
     layer->base.update = batchnorm2d_update;
@@ -709,84 +790,33 @@ Module* nn_batchnorm2d(size_t num_features) {
     layer->base.num_parameters = 2;
     layer->base.parameters = malloc(2 * sizeof(Tensor*));
     layer->base.gradients = malloc(2 * sizeof(Tensor*));
+    if (layer->base.parameters == NULL || layer->base.gradients == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed for BatchNorm2D layer parameters/gradients\n");
+        free(layer);
+        return NULL;
+    }
     
     layer->gamma = tensor_create(NULL, (size_t[]){1, num_features, 1, 1}, 4, (Device){CPU, 0});
     layer->beta = tensor_create(NULL, (size_t[]){1, num_features, 1, 1}, 4, (Device){CPU, 0});
-    tensor_fill_(layer->gamma, 1.0f);
-    tensor_fill_(layer->beta, 0.0f);
-    
     layer->running_mean = tensor_create(NULL, (size_t[]){1, num_features, 1, 1}, 4, (Device){CPU, 0});
     layer->running_var = tensor_create(NULL, (size_t[]){1, num_features, 1, 1}, 4, (Device){CPU, 0});
+    
+    if (layer->gamma == NULL || layer->beta == NULL || layer->running_mean == NULL || layer->running_var == NULL) {
+        fprintf(stderr, "Error: Failed to create tensors for BatchNorm2D layer\n");
+        free(layer->base.parameters);
+        free(layer->base.gradients);
+        free(layer);
+        return NULL;
+    }
+    
+    tensor_fill_(layer->gamma, 1.0f);
+    tensor_fill_(layer->beta, 0.0f);
     tensor_fill_(layer->running_mean, 0.0f);
     tensor_fill_(layer->running_var, 1.0f);
     
     layer->base.parameters[0] = layer->gamma;
     layer->base.parameters[1] = layer->beta;
     
-    return (Module*)layer;
-}
-
-// Dropout Layer
-typedef struct {
-    Module base;
-    float p;
-    Tensor* mask;
-} Dropout;
-
-static Tensor* dropout_forward(Module* module, Tensor* input) {
-    Dropout* layer = (Dropout*)module;
-    layer->mask = tensor_create(NULL, input->shape, input->ndim, input->device);
-    
-    if (layer->base.training) {
-        for (size_t i = 0; i < input->size; i++) {
-            layer->mask->data[i] = (float)(rand() / (float)RAND_MAX > layer->p);
-        }
-        
-        Tensor* output = tensor_mul(input, layer->mask);
-        tensor_mul_scalar_inplace(output, 1.0f / (1.0f - layer->p));
-        return output;
-    } else {
-        return tensor_clone(input);
-    }
-}
-
-static void dropout_backward(Module* module) {
-    Dropout* layer = (Dropout*)module;
-    if (layer->base.training) {
-        tensor_mul_inplace(layer->base.input, layer->mask);
-        tensor_mul_scalar_inplace(layer->base.input, 1.0f / (1.0f - layer->p));
-    }
-}
-
-static void dropout_update(Module* module, float lr) {
-    // Dropout has no parameters to update
-    (void)module;
-    (void)lr;
-}
-
-static void dropout_to(Module* module, Device device) {
-    Dropout* layer = (Dropout*)module;
-    if (layer->mask) layer->mask = tensor_to(layer->mask, device);
-}
-
-static void dropout_free(Module* module) {
-    Dropout* layer = (Dropout*)module;
-    if (layer->mask) tensor_free(layer->mask);
-    free(layer);
-}
-
-Module* nn_dropout(float p) {
-    Dropout* layer = malloc(sizeof(Dropout));
-    layer->base.forward = dropout_forward;
-    layer->base.backward = dropout_backward;
-    layer->base.update = dropout_update;
-    layer->base.to = dropout_to;
-    layer->base.free = dropout_free;
-    layer->base.num_parameters = 0;
-    layer->base.parameters = NULL;
-    layer->base.gradients = NULL;
-    layer->p = p;
-    layer->mask = NULL;
     return (Module*)layer;
 }
 
@@ -798,7 +828,16 @@ struct Sequential {
 
 Sequential* nn_sequential(Module** modules, size_t num_modules) {
     Sequential* model = malloc(sizeof(Sequential));
+    if (model == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed for Sequential model\n");
+        return NULL;
+    }
     model->modules = malloc(num_modules * sizeof(Module*));
+    if (model->modules == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed for Sequential model modules\n");
+        free(model);
+        return NULL;
+    }
     memcpy(model->modules, modules, num_modules * sizeof(Module*));
     model->num_modules = num_modules;
     return model;
@@ -808,6 +847,10 @@ Tensor* sequential_forward(Sequential* model, Tensor* input) {
     Tensor* output = input;
     for (size_t i = 0; i < model->num_modules; i++) {
         output = model->modules[i]->forward(model->modules[i], output);
+        if (output == NULL) {
+            fprintf(stderr, "Error: Forward pass failed at module %zu\n", i);
+            return NULL;
+        }
     }
     return output;
 }
