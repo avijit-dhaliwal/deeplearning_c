@@ -6,6 +6,7 @@ SRC_DIR = src
 OBJ_DIR = obj
 BIN_DIR = bin
 INCLUDE_DIR = include
+TEST_DIR = tests
 
 SOURCES = $(wildcard $(SRC_DIR)/*.c)
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
@@ -17,9 +18,12 @@ LIB_PATH = $(BIN_DIR)/$(LIB_NAME)
 EXAMPLE_SOURCES = $(wildcard examples/*.c)
 EXAMPLE_EXECUTABLES = $(EXAMPLE_SOURCES:examples/%.c=$(BIN_DIR)/%)
 
-.PHONY: all clean examples
+TEST_SOURCES = $(wildcard $(TEST_DIR)/*.c)
+TEST_EXECUTABLES = $(TEST_SOURCES:$(TEST_DIR)/%.c=$(BIN_DIR)/%)
 
-all: $(LIB_PATH) examples
+.PHONY: all clean examples tests
+
+all: $(LIB_PATH) examples tests
 
 $(LIB_PATH): $(OBJECTS)
     @mkdir -p $(BIN_DIR)
@@ -32,6 +36,12 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 examples: $(EXAMPLE_EXECUTABLES)
 
 $(BIN_DIR)/%: examples/%.c $(LIB_PATH)
+    @mkdir -p $(BIN_DIR)
+    $(CC) $(CFLAGS) $< $(LIB_PATH) $(LDFLAGS) -o $@
+
+tests: $(TEST_EXECUTABLES)
+
+$(BIN_DIR)/%: $(TEST_DIR)/%.c $(LIB_PATH)
     @mkdir -p $(BIN_DIR)
     $(CC) $(CFLAGS) $< $(LIB_PATH) $(LDFLAGS) -o $@
 

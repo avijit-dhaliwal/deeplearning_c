@@ -13,10 +13,34 @@ TrainResult train_epoch(Sequential* model, Optimizer* optimizer, Loss* criterion
         optimizer_zero_grad(optimizer);
         
         Tensor* outputs = sequential_forward(model, batch_features);
+        if (!outputs) {
+            fprintf(stderr, "Error: Forward pass failed in training\n");
+            tensor_free(batch_features);
+            tensor_free(batch_labels);
+            return result;
+        }
+        
         Tensor* loss = loss_forward(criterion, outputs, batch_labels);
+        if (!loss) {
+            fprintf(stderr, "Error: Loss computation failed in training\n");
+            tensor_free(outputs);
+            tensor_free(batch_features);
+            tensor_free(batch_labels);
+            return result;
+        }
+        
         result.train_loss += tensor_item(loss);
         
         Tensor* grad = loss_backward(criterion, outputs, batch_labels);
+        if (!grad) {
+            fprintf(stderr, "Error: Backward pass failed in training\n");
+            tensor_free(loss);
+            tensor_free(outputs);
+            tensor_free(batch_features);
+            tensor_free(batch_labels);
+            return result;
+        }
+        
         sequential_backward(model);
         optimizer_step(optimizer);
         
@@ -57,7 +81,22 @@ float evaluate(Sequential* model, Loss* criterion, DataLoader* data_loader) {
     Tensor *batch_features, *batch_labels;
     while (dataloader_next(data_loader, &batch_features, &batch_labels)) {
         Tensor* outputs = sequential_forward(model, batch_features);
+        if (!outputs) {
+            fprintf(stderr, "Error: Forward pass failed in evaluation\n");
+            tensor_free(batch_features);
+            tensor_free(batch_labels);
+            return 0;
+        }
+        
         Tensor* loss = loss_forward(criterion, outputs, batch_labels);
+        if (!loss) {
+            fprintf(stderr, "Error: Loss computation failed in evaluation\n");
+            tensor_free(outputs);
+            tensor_free(batch_features);
+            tensor_free(batch_labels);
+            return 0;
+        }
+        
         total_loss += tensor_item(loss);
         
         // Calculate accuracy
