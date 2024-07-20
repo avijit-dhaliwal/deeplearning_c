@@ -72,6 +72,9 @@ make
 make clean
 make
 ```
+
+4. This is currently the only way to use this library. I am working on making this available with `pip` and `brew`.
+
 ## Library Overview
 
 ### Tensor Operations
