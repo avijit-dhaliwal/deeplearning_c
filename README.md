@@ -138,21 +138,22 @@ The library provides utilities for data management:
 - DataLoader: Iterates over datasets, providing batches for training
 
 Example:
-```bash
+```c
 Dataset* train_dataset = dataset_create(train_features, train_labels);
 DataLoader* train_loader = dataloader_create(train_dataset, 64, true);
 ```
 ### Training Utilities
 Functions to simplify the training process:
 
-train_epoch(): Performs one epoch of training
-evaluate(): Evaluates model performance on a dataset
+`train_epoch()`: Performs one epoch of training
+
+`evaluate()`: Evaluates model performance on a dataset
 
 ## Usage Examples
 
 Basic Tensor Operations
 
-```bash
+```c
 // Create tensors
 size_t shape[] = {2, 3};
 Tensor* a = tensor_create(NULL, shape, 2, (Device){CPU, 0});
@@ -272,8 +273,8 @@ For NLP tasks, you can implement:
 - Language modeling
 
 Example architecture for text classification:
-```bash
-cCopyModule* layers[] = {
+```c
+Module* layers[] = {
     nn_embedding(vocab_size, embedding_dim),
     nn_lstm(embedding_dim, hidden_dim),
     nn_linear(hidden_dim, num_classes)
