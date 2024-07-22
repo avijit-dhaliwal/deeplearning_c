@@ -324,7 +324,7 @@ Key takeaways include:
 - Challenges in memory management
 - Considerations for GPU acceleration
 
-This blog post provides valuable information for those interested in the inner workings of deep learning frameworks and low-level implementations of neural networks.
+
 
 ## Contributing
 Contributions are welcome! Please feel free to submit a Pull Request.
