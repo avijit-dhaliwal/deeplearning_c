@@ -1,12 +1,10 @@
 #include "../include/serialize.h"
-#include "../include/nn.h"
 #include <stdio.h>
-#include <stdlib.h>
 
 void save_model(Sequential* model, const char* filename) {
     FILE* file = fopen(filename, "wb");
     if (!file) {
-        fprintf(stderr, "Error: Unable to open file for writing\n");
+        fprintf(stderr, "Error: Unable to open file for writing: %s\n", filename);
         return;
     }
     
@@ -28,73 +26,15 @@ void save_model(Sequential* model, const char* filename) {
                 }
                 break;
             case MODULE_RELU:
-            case MODULE_SIGMOID:
-            case MODULE_TANH:
             case MODULE_MAXPOOL2D:
             case MODULE_DROPOUT:
                 // These layers don't have parameters to save
                 break;
+            default:
+                fprintf(stderr, "Error: Unknown module type when saving\n");
+                fclose(file);
+                return;
         }
-    }
-    
-    fclose(file);
-}
-void save_checkpoint(Sequential* model, Optimizer* optimizer, int epoch, float loss, const char* filename) {
-    FILE* file = fopen(filename, "wb");
-    if (!file) {
-        fprintf(stderr, "Error: Unable to open file for writing\n");
-        return;
-    }
-    
-    fwrite(&epoch, sizeof(int), 1, file);
-    fwrite(&loss, sizeof(float), 1, file);
-    
-    // Save model
-    save_model(model, file);
-    
-    // Save optimizer state
-    fwrite(&optimizer->type, sizeof(int), 1, file);
-    fwrite(&optimizer->learning_rate, sizeof(float), 1, file);
-    if (optimizer->type == ADAM) {
-        fwrite(&optimizer->beta1, sizeof(float), 1, file);
-        fwrite(&optimizer->beta2, sizeof(float), 1, file);
-        fwrite(&optimizer->epsilon, sizeof(float), 1, file);
-        fwrite(&optimizer->t, sizeof(int), 1, file);
-    }
-    
-    fclose(file);
-}
-
-void load_checkpoint(Sequential** model, Optimizer** optimizer, int* epoch, float* loss, const char* filename) {
-    FILE* file = fopen(filename, "rb");
-    if (!file) {
-        fprintf(stderr, "Error: Unable to open file for reading\n");
-        return;
-    }
-    
-    fread(epoch, sizeof(int), 1, file);
-    fread(loss, sizeof(float), 1, file);
-    
-    // Load model
-    *model = load_model(file);
-    
-    // Load optimizer state
-    int optimizer_type;
-    float learning_rate, beta1, beta2, epsilon;
-    int t;
-    
-    fread(&optimizer_type, sizeof(int), 1, file);
-    fread(&learning_rate, sizeof(float), 1, file);
-    
-    if (optimizer_type == SGD) {
-        *optimizer = optim_sgd(*model, learning_rate);
-    } else if (optimizer_type == ADAM) {
-        fread(&beta1, sizeof(float), 1, file);
-        fread(&beta2, sizeof(float), 1, file);
-        fread(&epsilon, sizeof(float), 1, file);
-        fread(&t, sizeof(int), 1, file);
-        *optimizer = optim_adam(*model, learning_rate, beta1, beta2, epsilon);
-        (*optimizer)->t = t;
     }
     
     fclose(file);
@@ -103,7 +43,7 @@ void load_checkpoint(Sequential** model, Optimizer** optimizer, int* epoch, floa
 Sequential* load_model(const char* filename) {
     FILE* file = fopen(filename, "rb");
     if (!file) {
-        fprintf(stderr, "Error: Unable to open file for reading\n");
+        fprintf(stderr, "Error: Unable to open file for reading: %s\n", filename);
         return NULL;
     }
     
@@ -111,6 +51,11 @@ Sequential* load_model(const char* filename) {
     fread(&num_modules, sizeof(size_t), 1, file);
     
     Module** modules = malloc(num_modules * sizeof(Module*));
+    if (!modules) {
+        fprintf(stderr, "Error: Failed to allocate memory for modules\n");
+        fclose(file);
+        return NULL;
+    }
     
     for (size_t i = 0; i < num_modules; i++) {
         int module_type;
@@ -148,12 +93,6 @@ Sequential* load_model(const char* filename) {
             case MODULE_RELU:
                 module = nn_relu();
                 break;
-            case MODULE_SIGMOID:
-                module = nn_sigmoid();
-                break;
-            case MODULE_TANH:
-                module = nn_tanh();
-                break;
             case MODULE_MAXPOOL2D: {
                 size_t kernel_size, stride;
                 fread(&kernel_size, sizeof(size_t), 1, file);
@@ -183,8 +122,12 @@ Sequential* load_model(const char* filename) {
                 break;
             }
             default:
-                fprintf(stderr, "Error: Unknown module type\n");
+                fprintf(stderr, "Error: Unknown module type when loading\n");
                 fclose(file);
+                for (size_t j = 0; j < i; j++) {
+                    modules[j]->free(modules[j]);
+                }
+                free(modules);
                 return NULL;
         }
         

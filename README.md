@@ -178,7 +178,7 @@ tensor_free(b);
 tensor_free(c);
 tensor_free(d);
 Creating a Neural Network
-cCopy// Define layers
+// Define layers
 Module* layers[] = {
     nn_linear(784, 128),
     nn_relu(),
@@ -206,7 +206,7 @@ sequential_free(model);
 tensor_free(input);
 tensor_free(output);
 Training a Model
-cCopy// Load data
+// Load data
 Tensor *train_images, *train_labels, *test_images, *test_labels;
 load_mnist(&train_images, &train_labels, &test_images, &test_labels);
 
@@ -250,7 +250,7 @@ tensor_free(train_labels);
 tensor_free(test_images);
 tensor_free(test_labels);
 Saving and Loading Models
-cCopy// Save model
+// Save model
 save_model(model, "mnist_model.bin");
 
 // Load model
@@ -295,7 +295,7 @@ The library can be used to implement neural networks for reinforcement learning 
 ### Example DQN architecture:
 
 ```c
-cCopyModule* layers[] = {
+Module* layers[] = {
     nn_linear(state_dim, 64),
     nn_relu(),
     nn_linear(64, 64),
@@ -313,22 +313,7 @@ To optimize performance:
 - Implement data parallelism for distributed training
 - Profile your code to identify bottlenecks
 
-## Contributing
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-Fork the repository
-
-- Create your feature branch (git checkout -b feature/AmazingFeature)
-- Commit your changes (git commit -m 'Add some AmazingFeature')
-- Push to the branch (git push origin feature/AmazingFeature)
-- Open a Pull Request
-
-Any questions or feedback are welcome and appreciated. avijit.dhaliwal@gmail.com
-
-## License
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-Insights from Implementing PyTorch in C
+## Insights from Implementing PyTorch in C
 
 For a detailed discussion on the insights gained from implementing this PyTorch-like library in C, check out my blog post: Lessons Learned from Implementing PyTorch in C(Coming soon)
 
@@ -340,3 +325,21 @@ Key takeaways include:
 - Considerations for GPU acceleration
 
 This blog post provides valuable information for those interested in the inner workings of deep learning frameworks and low-level implementations of neural networks.
+
+## Contributing
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+Fork the repository
+
+- Create your feature branch (git checkout -b feature/AmazingFeature)
+- Commit your changes (git commit -m 'Add some AmazingFeature')
+- Push to the branch (git push origin feature/AmazingFeature)
+- Open a Pull Request
+
+Any questions or feedback are welcome and appreciated. 
+
+avijit.dhaliwal@gmail.com
+
+## License
+This project is licensed under the MIT License - see the LICENSE file for details.
+
