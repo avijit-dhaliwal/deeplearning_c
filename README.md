@@ -315,7 +315,7 @@ To optimize performance:
 
 ## Insights from Implementing PyTorch in C
 
-For a detailed discussion on the insights gained from implementing this PyTorch-like library in C, check out my blog post: Lessons Learned from Implementing PyTorch in C(Coming , I promise :) )
+For a detailed discussion on the insights gained from implementing this PyTorch-like library in C, check out my blog post: [Lessons Learned from Implementing PyTorch in C](https://avijitdhaliwal.com/post.html?id=deeplearning-c)
 
 Key takeaways include:
 
