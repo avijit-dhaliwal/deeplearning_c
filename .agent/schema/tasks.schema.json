@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OpenCode Agent Tasks",
+  "type": "object",
+  "required": ["iteration", "done", "tasks"],
+  "additionalProperties": false,
+  "properties": {
+    "iteration": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "done": {
+      "type": "boolean"
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "worktree",
+          "prompt",
+          "acceptance",
+          "test_cmd",
+          "risk"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string"},
+          "title": {"type": "string"},
+          "worktree": {"type": "string"},
+          "prompt": {"type": "string"},
+          "acceptance": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "test_cmd": {"type": "string"},
+          "risk": {"type": "string", "enum": ["low", "medium", "high"]},
+          "touched_paths_hint": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    }
+  }
+}
